@@ -40,7 +40,7 @@ Here is an example to replace the first H1 heading on a page:
 
 You can also chain actions together separated bu a semicolon:
 ```css
-  img { addAttribute('data-src', 'http:\/\/example.com'); addAttribute('class', 'newClass') }
+  img { addAttribute('data-src', 'example.com'); addAttribute('class', 'newClass') }
 ```
 
 
