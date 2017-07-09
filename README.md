@@ -1,5 +1,19 @@
 # jsoupstream
-A streaming library to parse HTML and uses CSS Selectors with callback functions to make modifications. The syntax of CSS Selectors is:
+A streaming library to parse HTML and uses CSS Selectors with callback functions to make modifications. 
+
+To build the library either use gradle:
+
+```gradle
+gradle clean build jar
+```
+
+or ant:
+
+```ant
+ant clean build jar
+```
+
+The library uses CSS selectors to identify elements to be operated on. The syntax of CSS Selectors is:
 ```css
   /*
   Some comment here
