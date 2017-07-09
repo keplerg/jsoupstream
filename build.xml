@@ -15,12 +15,12 @@
         <delete dir="${build.dir}"/>
     </target>
 
-    <target name="compile">
+    <target name="build">
         <mkdir dir="${classes.dir}"/>
         <javac includeantruntime="false" srcdir="${jar.src.dir}" destdir="${classes.dir}"/>
     </target>
 
-    <target name="jar" depends="compile">
+    <target name="jar" depends="build">
         <mkdir dir="${jar.dir}"/>
 		<jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}">
             <fileset file="LICENSE" />
