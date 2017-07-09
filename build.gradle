@@ -19,16 +19,13 @@ allprojects {
 }
 
 jar {
-    manifest {
-        attributes( "Main-Class": "org.jsoupstream.example.TestParser" )
-    }
     from {
         'LICENSE'
     }
     doFirst {
-		if (jarType == 'fat')
-		{
-        	from { configurations.runtime.collect { it.isDirectory() ? it : zipTree(it) } }
-		}
+	if (jarType == 'fat')
+	{
+            from { configurations.runtime.collect { it.isDirectory() ? it : zipTree(it) } }
+	}
     }
 }
