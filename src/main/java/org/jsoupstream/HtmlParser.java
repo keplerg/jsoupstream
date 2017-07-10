@@ -176,19 +176,16 @@ public class HtmlParser {
                             }
                         }
                     }
-                    if ( token.getSymbolType() != SymbolTable.Type.VOID_ELEMENT )
-                    {
-                        currentLevel++;
+                    currentLevel++;
 
-                        // now add the tag to the stack at the correct level
-                        if ( currentLevel >= stack.size() )
-                        {
-                            stack.add( new ArrayDeque<HtmlToken>() );
-                        }
-                        stackTokens = stack.get( currentLevel );
-                        token.onStack = true;
-                        stackTokens.push( token );
+                    // now add the tag to the stack at the correct level
+                    if ( currentLevel >= stack.size() )
+                    {
+                        stack.add( new ArrayDeque<HtmlToken>() );
                     }
+                    stackTokens = stack.get( currentLevel );
+                    token.onStack = true;
+                    stackTokens.push( token );
                 }
                 else if ( state == HtmlParser.State.IN_END_TAG )
                 {
