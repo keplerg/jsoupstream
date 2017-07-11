@@ -86,34 +86,26 @@ public class HtmlLexer
                 return HtmlToken.getToken( null, 0, 0, HtmlToken.Type.EOF, charset );
 
             case IN_PROCESSING_INSTRUCTION:
-                // Processing instruction may be returned in multiple chunks
                 return getProcessingInstruction();
 
             case IN_DOCTYPE:
-                // Doctype may be returned in multiple chunks
                 return getDocType();
 
             case IN_COMMENT:
-                // return up to ~BUFSIZ of comment
-                // comment may be returned in multiple chunks
                 return getComment();
 
             case IN_COMMENT_END:
-                // need to send comment end sequence
                 pos += this.read( buffer, pos, 3 );
                 state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.END_COMMENT, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.END_COMMENT, charset );
 
             case IN_CDATA:
-                // return up to ~BUFSIZ of data
-                // data may be returned in multiple chunks
                 return getCdata();
 
             case IN_CDATA_END:
-                // need to send CDATA end sequence
                 pos += this.read( buffer, pos, 3 );
                 state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.END_CDATA, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.END_CDATA, charset );
 
             case IN_OPEN_TAG:
             case IN_CLOSE_TAG:
@@ -123,7 +115,7 @@ public class HtmlLexer
                 return getAttributeName();
 
             case IN_ATTRIBUTE_VALUE:
-                // attribute value may be returned in multiple chunks
+                // attribute value may be returned in multiple chunks if > BUFSIZ
                 return getAttributeValue();
 
             default:
@@ -152,13 +144,13 @@ public class HtmlLexer
                         {
                             pos += this.read( buffer, pos, 3 );
                             state = State.IN_COMMENT;
-                            return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.START_COMMENT, charset );
+                            return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.START_COMMENT, charset );
                         }
                         else if ( peek(8) == 8 && compareStringToBuffer( "<![CDATA[" ) == 0 )
                         {
                             pos += this.read( buffer, pos, 8 );
                             state = State.IN_CDATA;
-                            return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.START_CDATA, charset );
+                            return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.START_CDATA, charset );
                         }
                         else 
                         {
@@ -168,13 +160,13 @@ public class HtmlLexer
                     case '/':
                         pos += this.read( buffer, pos, 1 );
                         state = State.IN_CLOSE_TAG;
-                        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.OPEN_END_TAG, charset );
+                        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.OPEN_END_TAG, charset );
                     case '?':
                         state = State.IN_PROCESSING_INSTRUCTION;
                         return getProcessingInstruction();
                     default:
                         state = State.IN_OPEN_TAG;
-                        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.OPEN_TAG, charset );
+                        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.OPEN_TAG, charset );
                     }
                 case '/':
                     peek(1);
@@ -183,11 +175,11 @@ public class HtmlLexer
                     {
                         pos += this.read( buffer, pos, 1 );
                         state = State.IN_TEXT;
-                        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.END_SELF_CLOSING_TAG, charset );
+                        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.END_SELF_CLOSING_TAG, charset );
                     }
                     else
                     {
-                        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.TEXT, charset );
+                        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.TEXT, charset );
                     }
                 case '=':
                     if ( state == State.IN_TAG )
@@ -195,17 +187,17 @@ public class HtmlLexer
                         state = State.IN_ATTRIBUTE_VALUE;
                     }
 
-                    return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.EQUALS, charset );
+                    return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.EQUALS, charset );
                 case '>':
                     state = State.IN_TEXT;
-                    return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.CLOSE_TAG, charset );
+                    return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.CLOSE_TAG, charset );
                 default:
                     if ( state == State.IN_TEXT )
                     {
                         return getText();
                     }
 
-                    return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.UNKNOWN, charset );
+                    return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.UNKNOWN, charset );
                 }
             }
         }
@@ -277,6 +269,9 @@ public class HtmlLexer
             {
                 if ( in_mark )
                 {
+                    // readBuffer = Arrays.copyOfRange( readBuffer, mark_pos, IN_BUFSIZ );
+                    if ( mark_pos > 0 )
+                    {
                     // shift the data left to allow more room
                     for ( int i = 0; i < (in_pos - mark_pos); i++ )
                     {
@@ -284,11 +279,12 @@ public class HtmlLexer
                     }
                     in_pos -= mark_pos;
                     mark_pos = 0;
+                    }
                     in_size = in.read( readBuffer, in_pos, (IN_BUFSIZ - in_pos) );
                 }
                 else
                 {
-                    in_size = in.read( readBuffer, 0 , IN_BUFSIZ );
+                    in_size = in.read( readBuffer, 0, IN_BUFSIZ );
                     in_pos = 0;
                 }
 
@@ -345,14 +341,14 @@ public class HtmlLexer
     {
         int num_read;
 
-        if ( pos >= (BUFSIZ - 1) )
+        if ( pos >= (buffer.length - 1) )
         {
             return 0;
         }
 
-        if ( (pos + how_far) >= BUFSIZ )
+        if ( (pos + how_far) >= buffer.length )
         {
-            how_far = BUFSIZ - pos - 1;
+            how_far = buffer.length - pos - 1;
         }
 
         this.mark(how_far);
@@ -365,10 +361,63 @@ public class HtmlLexer
         return num_read;
     }
 
+    private void advanceTo( String str, boolean inclusive, State state ) throws IOException
+    {
+        int num_read;
+        byte[] bytes = str.getBytes( charset );
+        int buf_end = buffer.length - bytes.length;
+
+        while ( state != State.EOF )
+        {
+            while ( pos < buf_end )
+            {
+                num_read = peek( bytes.length );
+                if ( num_read < 0 )
+                {
+                    state = State.EOF;
+                    break;
+                }
+
+                if ( num_read == bytes.length && buffer[pos] == bytes[0] )
+                {
+                    boolean match = true;
+                    for ( int i = 1; i < bytes.length; i++ )
+                    {
+                        if ( buffer[pos+i] != bytes[i] )
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if ( match )
+                    {
+                        if ( inclusive )
+                        {
+                            for ( int i = 0; i < bytes.length; i++ )
+                            {
+                                buffer[pos++] = (byte)this.read();
+                            }
+                        }
+                        this.state = state;
+                        return;
+                    }
+                }
+                buffer[pos++] = (byte)this.read();
+            }
+
+            // reallocate a larger buffer for this token
+            buffer = Arrays.copyOfRange( buffer, 0, (buffer.length + BUFSIZ) );
+            buf_end = buffer.length - bytes.length;
+        }
+
+        state = State.EOF;
+        return;
+    }
+
     private HtmlToken getWhitespace() throws IOException
     {
         int num_read;
-        int buf_end = BUFSIZ - 1;
+        int buf_end = buffer.length - 1;
 
         if ( state == State.IN_TEXT )
         {
@@ -390,18 +439,18 @@ public class HtmlLexer
                 {
                     state = State.IN_ATTRIBUTE_NAME;
                 }
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.WHITESPACE, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.WHITESPACE, charset );
             }
             buffer[pos++] = (byte)this.read();
         }
 
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.WHITESPACE, charset );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.WHITESPACE, charset );
     }
 
     private void advanceString(byte quote) throws IOException
     {
         int ch;
-        int buf_end = BUFSIZ - 1;
+        int buf_end = buffer.length - 1;
 
         while ( pos < buf_end )
         {
@@ -425,7 +474,7 @@ public class HtmlLexer
     private HtmlToken getTag() throws IOException
     {
         int num_read;
-        int buf_end = BUFSIZ - 1;
+        int buf_end = buffer.length - 1;
 
         while ( pos < buf_end )
         {
@@ -439,23 +488,23 @@ public class HtmlLexer
             if ( Character.isWhitespace( (char)buffer[pos] ) )
             {
                 state = State.IN_TAG;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.TAG_NAME, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.TAG_NAME, charset );
             }
             else if ( buffer[pos] == '/' || buffer[pos] == '>' )
             {
                 state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.TAG_NAME, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.TAG_NAME, charset );
             }
             buffer[pos++] = (byte)this.read();
         }
 
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.TAG_NAME, charset );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.TAG_NAME, charset );
     }
 
     private HtmlToken getAttributeName() throws IOException
     {
         int num_read;
-        int buf_end = BUFSIZ - 1;
+        int buf_end = buffer.length - 1;
 
         while ( pos < buf_end )
         {
@@ -469,29 +518,29 @@ public class HtmlLexer
             if ( Character.isWhitespace( (char)buffer[pos] ) || buffer[pos] == '=' )
             {
                 state = State.IN_TAG;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_NAME, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_NAME, charset );
             }
             else if ( buffer[pos] == '>' )
             {
                 state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_NAME, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_NAME, charset );
             }
             buffer[pos++] = (byte)this.read();
         }
 
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_NAME, charset );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_NAME, charset );
     }
 
     private HtmlToken getAttributeValue() throws IOException
     {
         int num_read;
-        int buf_end = BUFSIZ - 1;
+        int buf_end = buffer.length - 1;
 
         num_read = peek(1);
         if ( num_read < 0 )
         {
             state = State.EOF;
-            return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.UNKNOWN, charset );
+            return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.UNKNOWN, charset );
         }
 
         if ( Character.isWhitespace( (char)buffer[pos] ) )
@@ -512,7 +561,7 @@ public class HtmlLexer
                 current_quote = ' ';
                 state = State.IN_TAG;
             }
-            return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
+            return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
         }
 
         while ( pos < buf_end )
@@ -527,150 +576,46 @@ public class HtmlLexer
             if ( Character.isWhitespace( (char)buffer[pos] ) )
             {
                 state = State.IN_TAG;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
             }
             else if ( buffer[pos] == '>' )
             {
                 state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
+                return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
             }
             buffer[pos++] = (byte)this.read();
         }
 
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.ATTRIBUTE_VALUE, charset );
     }
 
     private HtmlToken getComment() throws IOException
     {
-        int num_read;
-        int buf_end = BUFSIZ - 3;
-
-        while ( pos < buf_end )
-        {
-            num_read = peek(1);
-            if ( num_read < 0 )
-            {
-                state = State.EOF;
-                break;
-            }
-
-            if ( buffer[pos] == '-' )
-            {
-                // see if we have the end of comment
-                num_read = peek(3);
-                if ( num_read == 3 && buffer[pos+1] == '-' && buffer[pos+2] == '>' )
-                {
-                    state = State.IN_COMMENT_END;
-                    return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.COMMENT, charset );
-                }
-            }
-            buffer[pos++] = (byte)this.read();
-        }
-
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.COMMENT, charset );
+        advanceTo( "-->", false, State.IN_COMMENT_END );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.COMMENT, charset );
     }
 
     private HtmlToken getCdata() throws IOException
     {
-        int num_read;
-        int buf_end = BUFSIZ - 3;
-
-        while ( pos < buf_end )
-        {
-            num_read = peek(1);
-            if ( num_read < 0 )
-            {
-                state = State.EOF;
-                break;
-            }
-
-            if ( buffer[pos] == ']' )
-            {
-                // see if we have the end of comment
-                num_read = peek(3);
-                if ( num_read == 3 && buffer[pos+1] == ']' && buffer[pos+2] == '>' )
-                {
-                    state = State.IN_CDATA_END;
-                    return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.CDATA, charset );
-                }
-            }
-            buffer[pos++] = (byte)this.read();
-        }
-
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.CDATA, charset );
+        advanceTo( "]]>", false, State.IN_CDATA_END );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.CDATA, charset );
     }
 
     private HtmlToken getProcessingInstruction() throws IOException
     {
-        int ch;
-        int buf_end = BUFSIZ - 1;
-
-        while ( pos < buf_end )
-        {
-            ch = this.read();
-            if ( ch < 0 )
-            {
-                state = State.EOF;
-                break;
-            }
-            buffer[pos++] = (byte)ch;
-
-            if ( ch == '>' )
-            {
-                state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.PROCESSING_INSTRUCTION, charset );
-            }
-        }
-
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.PROCESSING_INSTRUCTION, charset );
+        advanceTo( ">", true, State.IN_TEXT );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.PROCESSING_INSTRUCTION, charset );
     }
 
     private HtmlToken getDocType() throws IOException
     {
-        int ch;
-        int buf_end = BUFSIZ - 1;
-
-        while ( pos < buf_end )
-        {
-            ch = this.read();
-            if ( ch < 0 )
-            {
-                state = State.EOF;
-                break;
-            }
-            buffer[pos++] = (byte)ch;
-
-            if ( ch == '>' )
-            {
-                state = State.IN_TEXT;
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.DOCTYPE, charset );
-            }
-        }
-
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.DOCTYPE, charset );
+        advanceTo( ">", true, State.IN_TEXT );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.DOCTYPE, charset );
     }
 
     private HtmlToken getText() throws IOException
     {
-        int num_read;
-        int buf_end = BUFSIZ - 1;
-
-        while ( pos < buf_end )
-        {
-            num_read = peek(1);
-            if ( num_read < 0 )
-            {
-                state = State.EOF;
-                break;
-            }
-
-            if ( buffer[pos] == '<' )
-            {
-                return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.TEXT, charset );
-            }
-            buffer[pos++] = (byte)this.read();
-        }
-
-        return HtmlToken.getToken( Arrays.copyOfRange(buffer, 0, pos), 0, pos, HtmlToken.Type.TEXT, charset );
+        advanceTo( "<", false, State.IN_TEXT );
+        return HtmlToken.getToken( buffer, 0, pos, HtmlToken.Type.TEXT, charset );
     }
 }
