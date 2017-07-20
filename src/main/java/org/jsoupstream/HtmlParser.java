@@ -3,6 +3,7 @@ package org.jsoupstream;
 import java.util.List;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.Iterator;
@@ -28,10 +29,14 @@ import org.jsoupstream.selector.ParseException;
  */
 public class HtmlParser {
 
+    private static final int BUFSIZ = 65536;
+
     private static enum State
     {
         NOT_IN_TAG,
         IN_START_TAG,
+        IN_COMMENT,
+        IN_CDATA,
         IN_SELF_CLOSING_TAG,
         IN_END_TAG
     }
@@ -59,6 +64,7 @@ public class HtmlParser {
 
     public String parse ( HtmlLexer lexer ) throws IOException
     {
+        State prevState = HtmlParser.State.NOT_IN_TAG;
         State state = HtmlParser.State.NOT_IN_TAG;
         StringBuffer outBuffer = new StringBuffer();
         Integer start;
@@ -73,6 +79,10 @@ public class HtmlParser {
         String currentTag = null;
         int endTagStart = 0;
         boolean passThru = false;
+        boolean matchedCdata = false;
+        int cdataSequence = 0;
+        boolean matchedComment = false;
+        int commentSequence = 0;
         List<HtmlToken> tokenQueue;
 
         lexer.setCharset( charset );
@@ -81,12 +91,12 @@ public class HtmlParser {
         {
             if ( activeSelectorCount(deferredExecute) == 0 )
             {
+                // all selectors have been satified - no more parsing required
                 passThru = true;
                 if ( tokenBuffer.size() > 0 )
                 {
                     for ( HtmlToken tok : tokenBuffer )
                     {
-                        // out.write( tok.text );
                         outBuffer.append( tok.str );
                         HtmlToken.relinquish( tok );
                     }
@@ -94,29 +104,32 @@ public class HtmlParser {
                 }
                 outBuffer.append( token.str );
                 HtmlToken.relinquish( token );
-                byte[] buffer = new byte[4096];
-                int num = lexer.read( buffer, 0, 4096 );
+                byte[] buffer = new byte[BUFSIZ];
+                int num = lexer.read( buffer, 0, BUFSIZ );
                 while ( num > 0 )
                 {
                     outBuffer.append( new String( buffer, 0, num, charset ) );
-                    num = lexer.read( buffer, 0, 4096 );
+                    num = lexer.read( buffer, 0, BUFSIZ );
                 }
                 break;
             }
 
-            if ( token.type != HtmlToken.Type.OPEN_TAG && bufferingStart.size() == 0 )
+            if ( token.type != HtmlToken.Type.OPEN_TAG
+                && token.type != HtmlToken.Type.START_COMMENT
+                && token.type != HtmlToken.Type.START_CDATA
+                && token.type != HtmlToken.Type.DOCTYPE
+                && token.type != HtmlToken.Type.PROCESSING_INSTRUCTION
+                && bufferingStart.size() == 0 )
             {
                 if ( tokenBuffer.size() > 0 )
                 {
                     for ( HtmlToken tok : tokenBuffer )
                     {
-                        // out.write( tok.text );
                         outBuffer.append( tok.str );
                         HtmlToken.relinquish( tok );
                     }
                     tokenBuffer.clear();
                 }
-                // out.write( token.text );
                 outBuffer.append( token.str );
                 HtmlToken.relinquish( token );
             }
@@ -152,23 +165,19 @@ public class HtmlParser {
                                 if ( bufferingStart.size() > 1 )
                                 {
                                     // remove start of current tag breifly while we handle last tag that wasn't closed
+                                    Integer currentStart = bufferingStart.pop();
                                     start = bufferingStart.pop();
-                                    start = bufferingStart.peek();
                                     tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() - 2 );
                                     HashSet<Selector> removeSet = new HashSet<Selector>();
                                     for ( Selector selector : deferredExecute )
                                     {
                                         if ( ! selector.isExpired() )
                                         {
-                                            if ( selector.executeActions( tokenQueue, removeSet, currentLevel, false ) )
-                                            {
-                                                start = bufferingStart.pop();
-                                                break;
-                                            }
+                                            selector.executeActions( tokenQueue, removeSet, currentLevel, false );
                                         }
                                     }
                                     deferredExecute.removeAll( removeSet );
-                                    bufferingStart.push( tokenBuffer.size() - 2 );
+                                    bufferingStart.push( currentStart );
                                 }
                                 relinquishHtmlTokens( stack, currentLevel );
                                 currentLevel--;
@@ -235,14 +244,16 @@ public class HtmlParser {
                                     // is this a self closing tag?
                                     if ( stackToken != null && stackToken.getSymbolType() == SymbolTable.Type.VOID_ELEMENT )
                                     {
-                                        selector.executeActions( tokenQueue, null, currentLevel, false );
+                                        if ( ! selector.isExpired() )
+                                        {
+                                            selector.executeActions( tokenQueue, null, currentLevel, false );
+                                        }
                                     }
                                     else // normal open tag
                                     {
                                         deferredExecute.add( selector );
                                         keepBuffering = true;
                                     }
-                                    break;
                                 }
                             }
                         }
@@ -261,60 +272,49 @@ public class HtmlParser {
                 {
                     if ( checkOnStack( currentTag, stack, currentLevel, outBuffer ) )
                     {
-                        while ( currentTag != null && currentLevel > 0 )
+                        while ( currentLevel > 0 )
                         {
+                            // Make sure we match the start tag on the stack or there is a forced close
                             stackTokens = stack.get( currentLevel );
                             if ( stackTokens.size() > 0 )
                             {
-                                // Make sure we match the start tag on the stack or there is a forced close
                                 stackToken = stackTokens.peek( );
-                                if ( bufferingStart.size() > 0 )
+                            }
+                            else
+                            {
+                                stackToken = null;
+                            }
+
+                            if ( bufferingStart.size() > 0 )
+                            {
+                                start = bufferingStart.pop();
+                                boolean implied = false;
+                                if ( stackToken != null && currentTag.equalsIgnoreCase( stackToken.str ) )
                                 {
-                                    start = bufferingStart.peek();
-                                    boolean implied = false;
-                                    if ( currentTag.equalsIgnoreCase( stackToken.str ) )
-                                    {
-                                        tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
-                                    }
-                                    else
-                                    {
-                                        implied = true;
-                                        tokenQueue = tokenBuffer.subList( start, (endTagStart - 1) );
-                                    }
-                                    HashSet<Selector> removeSet = new HashSet<Selector>();
-                                    for ( Selector selector : deferredExecute )
-                                    {
-                                        if ( ! selector.isExpired() )
-                                        {
-                                            if ( selector.executeActions( tokenQueue, removeSet, currentLevel, implied ) )
-                                            {
-                                                if ( bufferingStart.size() > 0 )
-                                                {
-                                                    start = bufferingStart.pop();
-                                                }
-                                            }
-                                        }
-                                    }
-                                    deferredExecute.removeAll( removeSet );
+                                    tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
                                 }
-                                if ( currentTag.equalsIgnoreCase( stackToken.str ) )
+                                else
                                 {
-                                    currentTag = null;
+                                    implied = true;
+                                    tokenQueue = tokenBuffer.subList( start, (endTagStart - 1) );
                                 }
-                                else if ( stackToken.symbol != null && stackToken.symbol.implied != null )
+                                HashSet<Selector> removeSet = new HashSet<Selector>();
+                                for ( Selector selector : deferredExecute )
                                 {
-                                    for ( String sym : stackToken.symbol.implied )
+                                    if ( ! selector.isExpired() )
                                     {
-                                        if ( currentTag.equalsIgnoreCase( sym ) )
-                                        {
-                                            currentTag = null;
-                                            break;
-                                        }
+                                        selector.executeActions( tokenQueue, removeSet, currentLevel, implied );
                                     }
                                 }
-    
-                                relinquishHtmlTokens( stack, currentLevel );
-                                currentLevel--;
+                                deferredExecute.removeAll( removeSet );
+                            }
+
+                            relinquishHtmlTokens( stack, currentLevel );
+                            currentLevel--;
+
+                            if ( currentTag.equalsIgnoreCase( stackToken.str ) )
+                            {
+                                break;
                             }
                         }
                     }
@@ -367,8 +367,130 @@ public class HtmlParser {
                 endTagStart = tokenBuffer.size();
                 state = HtmlParser.State.IN_END_TAG;
                 break;
+            case DOCTYPE:
+                currentLevel++;
+                tokenQueue = tokenBuffer.subList( (tokenBuffer.size() - 1), tokenBuffer.size() );
+                for ( Selector selector : selectors )
+                {
+                    if ( selector.check( null, tokenQueue, currentLevel, 0 ) )
+                    {
+                        if ( ! selector.isExpired() )
+                        {
+                            selector.executeActions( tokenQueue, null, currentLevel, false );
+                        }
+                    }
+                }
+                currentLevel--;
+                break;
+            case PROCESSING_INSTRUCTION:
+                currentLevel++;
+                tokenQueue = tokenBuffer.subList( (tokenBuffer.size() - 1), tokenBuffer.size() );
+                for ( Selector selector : selectors )
+                {
+                    if ( selector.check( null, tokenQueue, currentLevel, 0 ) )
+                    {
+                        if ( ! selector.isExpired() )
+                        {
+                            selector.executeActions( tokenQueue, null, currentLevel, false );
+                        }
+                    }
+                }
+                currentLevel--;
+                break;
+            case START_CDATA:
+                currentLevel++;
+                if ( cdataSequence == 0 && currentLevel < stack.size() )
+                {
+                    stackTokens = stack.get( currentLevel );
+                    cdataSequence = stackTokens.size();
+                }
+                cdataSequence++;
+                tokenQueue = tokenBuffer.subList( (tokenBuffer.size() - 1), tokenBuffer.size() );
+                for ( Selector selector : selectors )
+                {
+                    if ( selector.check( null, tokenQueue, currentLevel, cdataSequence ) )
+                    {
+                        matchedCdata = true;
+                    }
+                }
+                if ( matchedCdata )
+                {
+                    bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
+                }
+                else
+                {
+                    cdataSequence = 0;
+                }
+                prevState = state;
+                state = HtmlParser.State.IN_CDATA;
+                break;
+            case CDATA:
+                break;
+            case END_CDATA:
+                if ( matchedCdata && bufferingStart.size() > 0 )
+                {
+                    start = bufferingStart.pop();
+                    tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
+                    for ( Selector selector : selectors )
+                    {
+                        if ( ! selector.isExpired() )
+                        {
+                            selector.executeActions( tokenQueue, null, currentLevel, false );
+                        }
+                    }
+                }
+                currentLevel--;
+                matchedCdata = false;
+                state = prevState;
+                break;
+            case START_COMMENT:
+                currentLevel++;
+                if ( commentSequence == 0 && currentLevel < stack.size() )
+                {
+                    stackTokens = stack.get( currentLevel );
+                    commentSequence = stackTokens.size();
+                }
+                commentSequence++;
+                tokenQueue = tokenBuffer.subList( (tokenBuffer.size() - 1), tokenBuffer.size() );
+                for ( Selector selector : selectors )
+                {
+                    if ( selector.check( null, tokenQueue, currentLevel, commentSequence ) )
+                    {
+                        matchedComment = true;
+                    }
+                }
+                if ( matchedComment )
+                {
+                    bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
+                }
+                else
+                {
+                    commentSequence = 0;
+                }
+                prevState = state;
+                state = HtmlParser.State.IN_COMMENT;
+                break;
             case COMMENT:
-                // System.out.println( "[["+token.str+"]]" );
+                break;
+            case END_COMMENT:
+                if ( matchedComment && bufferingStart.size() > 0 )
+                {
+                    start = bufferingStart.pop();
+                    tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
+                    for ( Selector selector : selectors )
+                    {
+                        if ( ! selector.isExpired() )
+                        {
+                            selector.executeActions( tokenQueue, null, currentLevel, false );
+                        }
+                    }
+                }
+                currentLevel--;
+                matchedComment = false;
+                state = prevState;
+                break;
+            default:
+                break;
             }
 
             token = lexer.advance();
@@ -401,7 +523,11 @@ public class HtmlParser {
         }
         HtmlToken.replenish( );
 
-      return outBuffer.toString();
+        // outBuffer.append("\nCurrent level "+currentLevel+"\n");
+        // outBuffer.append("\nbufferingStart size "+bufferingStart.size()+"\n");
+        // outBuffer.append("\nPool size "+HtmlToken.getPoolSize()+"\n");
+
+        return outBuffer.toString();
     }
 
     public void reset()
@@ -490,19 +616,43 @@ public class HtmlParser {
             return;
         }
 
-        for ( int i = 0 ; i < stack.size(); i++ )
+        for ( int i = 1 ; i < stack.size(); i++ )
         {
             stackTokens = stack.get( i );
-            token = ( stackTokens.size() == 0 ) ? null : stackTokens.peek( );
-            if ( token != null )
+            if ( stackTokens.size() > 0 )
             {
-                sb.append( "\n"+i+" [["+token.str+"]]" );
+                Iterator<HtmlToken> it = stackTokens.iterator();
+                sb.append( "\n"+i+" " );
+                while ( it.hasNext() )
+                {
+                    token = it.next();
+                    sb.append( "["+token.str+"]" );
+                }
             }
             else
             {
-                sb.append( "\n"+i+" [[EMPTY]]" );
+                sb.append( "\n"+i+" [EMPTY]" );
             }
         }
         sb.append( "\n[[-----]]\n" );
+    }
+
+    private void printQueue( List<HtmlToken> queue, StringBuffer sb )
+    {
+        HtmlToken token;
+
+        if ( queue == null || queue.size() == 0 )
+        {
+            return;
+        }
+
+        for ( int i = 1 ; i < queue.size(); i++ )
+        {
+            token = queue.get( i );
+            if ( token != null )
+            {
+                sb.append( token.str );
+            }
+        }
     }
 }

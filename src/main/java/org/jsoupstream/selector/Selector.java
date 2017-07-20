@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Iterator;
 import org.jsoupstream.HtmlToken;
 import org.jsoupstream.SymbolTable;
 
@@ -17,6 +18,7 @@ public class Selector
     private final ArrayList<Component> components = new ArrayList<Component>();
     private final ArrayList<Action> actions = new ArrayList<Action>();
 
+    private boolean done = false; // short circuit to optimize performance
     private int start = 1; // when to start executing actions
     private int count = 0; // how many times to executing actions ( 0 means unlimited )
     private int matches = 0; // how many times selector matched
@@ -56,6 +58,11 @@ public class Selector
         this.actions.add( action );
     }
 
+    public void setDone(boolean done)
+    {
+        this.done = done;
+    }
+
     public void setStart(int start)
     {
         this.start = start;
@@ -78,7 +85,11 @@ public class Selector
 
     public boolean isExpired()
     {
-        if ( count == 0 )
+        if ( done )
+        {
+            return true;
+        }
+        else if ( count == 0 )
         {
             return false;
         }
@@ -90,14 +101,33 @@ public class Selector
 
     public boolean check( HtmlToken stackToken, List<HtmlToken> tokenQueue, int level, int sequence )
     {
+        boolean anyMatched = false;
         boolean matched = false;
         int depthMatched = 0;
         int lastLevel = 0;
         Component lastComponent = null;
+        Component component = null;
+        Component nextComponent = null;
  
         // find how deep we have already matched
-        for ( Component component : components )
+        Iterator<Component> it = components.iterator();
+        if ( it.hasNext() )
         {
+            nextComponent = it.next();
+        }
+
+        while ( nextComponent != null )
+        {
+            component = nextComponent;
+            if ( it.hasNext() )
+            {
+                nextComponent = it.next();
+            }
+            else
+            {
+                nextComponent = null;
+            }
+
             if ( depthMatched == 0 )
             {
                 // root component - no previous level/sequence
@@ -107,7 +137,8 @@ public class Selector
             {
                 lastComponent.resetLevelIndex();
                 lastLevel = lastComponent.getNextMatchedLevel();
-                while ( lastLevel > 0 )
+                matched = false;
+                while ( LevelsMatchedArray.getLevel( lastLevel ) > 0 )
                 {
                     matched = component.matches( tokenQueue, LevelsMatchedArray.getLevel( lastLevel ), LevelsMatchedArray.getSequence( lastLevel ), level, sequence );
                     if ( matched )
@@ -118,11 +149,19 @@ public class Selector
                     lastLevel = lastComponent.getNextMatchedLevel();
                 }
             }
+
             if ( ! matched )
             {
                 if ( stackToken == null || stackToken.getSymbolType() != SymbolTable.Type.VOID_ELEMENT )
                 {
-                    component.clearLevelMatched( level, false );
+                    if ( nextComponent != null )
+                    {
+                        component.clearLevelMatched( ( level + nextComponent.getLevelAdjustment() ), false );
+                    }
+                    else
+                    {
+                        component.clearLevelMatched( level, false );
+                    }
                 }
             }
             if ( ! component.hasLevelsMatched() )
@@ -156,35 +195,36 @@ public class Selector
     {
         matches = 0;
         executes = 0;
+        done = false;
         for ( Component component : components )
         {
             component.reset( );
         }
     }
 
-    public boolean executeActions( List<HtmlToken> tokenQueue, Set<Selector> removeSet, int level, boolean implied )
+    public void executeActions( List<HtmlToken> tokenQueue, Set<Selector> removeSet, int level, boolean implied )
     {
-        if ( matches < start || isExpired() )
-        {
-            return false;
-        }
-
         if ( levelsMatched.size() == 0 )
         {
-            return false;
+            return;
         }
 
         int levelMatch = levelsMatched.peek();
         if ( level != levelMatch )
         {
-            return false;
+            return;
         }
         levelsMatched.pop();
+
+        if ( matches < start || isExpired() )
+        {
+            return;
+        }
 
         for (Action action : actions)
         {
             // all passed parameters are strings
-            if ( ! action.execute( tokenQueue ) )
+            if ( ! action.execute( this, tokenQueue ) )
             {
                 break;
             }
@@ -198,7 +238,7 @@ public class Selector
         this.clearLevelMatched( level, implied );
 
         executes++;
-        return true;
+        return;
     }
 
 

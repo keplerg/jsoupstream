@@ -1,11 +1,13 @@
 package org.jsoupstream.selector;
 
 /**
- *  Keeps track of level and sequence where the match occured. A singlr integer is used to represent level and sequence.
+ *  Keeps track of active status, level and sequence where the match occured.
+ *  A single integer is used to represent active status, level and sequence.
  */
 public class LevelsMatchedArray
 {
     private final static int FACTOR = 10000;
+    private final static int ACTIVE_MASK = 0b01000000000000000000000000000000;
     private final static int INCREMENT = 4;
 
     private int max = INCREMENT; // upper bound of element in array.
@@ -23,7 +25,7 @@ public class LevelsMatchedArray
         {
             if ( levels[i] == 0 )
             {
-                levels[i] = ( level * FACTOR ) + sequence;
+                levels[i] = (( level * FACTOR ) + sequence) | ACTIVE_MASK;
                 return;
             }
         }
@@ -40,11 +42,18 @@ public class LevelsMatchedArray
         max = newMax;
     }
 
-    public void remove( int level )
+    // inactivates current level and removes nested levels
+    public void remove( int level, int depth )
     {
         for ( int i = 0; i < max; i++ )
         {
-            if ( ( levels[i] / FACTOR ) > level )
+            if ( depth == 0 && ( (levels[i] & ~ACTIVE_MASK) / FACTOR ) == level )
+            {
+                // inactivate but leave so sequence can be calculated
+                levels[i] &= ~ACTIVE_MASK;
+            }
+
+            if ( ( (levels[i] & ~ACTIVE_MASK) / FACTOR ) > ( level + depth ) )
             {
                 levels[i] = 0;
             }
@@ -63,7 +72,7 @@ public class LevelsMatchedArray
     {
         for ( int i = 0; i < max; i++ )
         {
-            if ( levels[i] != 0 )
+            if ( ( levels[i] & ACTIVE_MASK ) != 0 )
             {
                 return true;
             }
@@ -81,7 +90,7 @@ public class LevelsMatchedArray
     {
         while ( current < max )
         {
-            if ( ( levels[current] / FACTOR ) == level )
+            if ( ( (levels[current] & ~ACTIVE_MASK) / FACTOR ) == level )
             {
                 return levels[current++];
             }
@@ -95,7 +104,7 @@ public class LevelsMatchedArray
     {
         while ( current < max )
         {
-            if ( levels[current] > 0 )
+            if ( ( levels[current] & ACTIVE_MASK ) != 0 )
             {
                 return levels[current++];
             }
@@ -107,12 +116,17 @@ public class LevelsMatchedArray
 
     public static int getLevel( int num )
     {
-        return ( num / FACTOR );
+        return ( (num & ~ACTIVE_MASK) / FACTOR );
     }
 
     public static int getSequence( int num )
     {
-        return ( num % FACTOR );
+        return ( (num & ~ACTIVE_MASK) % FACTOR );
+    }
+
+    public static boolean isActive( int num )
+    {
+        return ( ( num & ACTIVE_MASK ) != 0 );
     }
 
     public String toString()
@@ -125,9 +139,11 @@ public class LevelsMatchedArray
             if ( levels[i] != 0 )
             {
                 sb.append( "<" );
-                sb.append( (levels[i] / FACTOR ) );
+                sb.append( ((levels[i] & ~ACTIVE_MASK) / FACTOR ) );
                 sb.append( "," );
-                sb.append( (levels[i] % FACTOR ) );
+                sb.append( ((levels[i] & ~ACTIVE_MASK) % FACTOR ) );
+                sb.append( "," );
+                sb.append( (((levels[i] & ACTIVE_MASK) != 0) ? "ACTIVE" : "INACTIVE") );
                 sb.append( ">" );
             }
         }

@@ -40,7 +40,6 @@ public class HtmlToken
 
     public Type type;
     public SymbolTable.Symbol symbol;
-    public byte[] text;
     public String str;
     public boolean onStack = false;
 
@@ -93,7 +92,6 @@ public class HtmlToken
             token = new HtmlToken();
         }
 
-        token.text = s;
         token.str = (s == null) ? "" : new String( s, offset, len, charset );
         token.type = t;
         if (t == Type.TAG_NAME)

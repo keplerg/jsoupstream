@@ -25,10 +25,9 @@ public class Component
     private final String tagSelector; // tag name or '*' (universal selector)
 
     // Pseudo selectors:
-    private boolean is_first = false;
-    // odd = 2n+1, even = 2n+0, 5th child = 0n+5
-    private int nth_child_a = 1; // the a in an+b
-    private int nth_child_b = 0; // the b in an+b
+    // first-child == 0n+1, odd = 2n+1, even = 2n+0, 5th child = 0n+5
+    private int nthChildA = 1; // the a in an+b
+    private int nthChildB = 0; // the b in an+b
 
     // Attribute selectors:
     private ArrayList<AttributeSelector> attributes = new ArrayList<AttributeSelector>();
@@ -49,8 +48,8 @@ public class Component
 
     public void setNthChild( int a, int b )
     {
-        nth_child_a = a;
-        nth_child_b = b;
+        nthChildA = a;
+        nthChildB = b;
     }
 
     // Called with a single starting or self closing element
@@ -97,20 +96,114 @@ public class Component
             break;
         }
  
-        // check the TAG 
-        if ( ! tagSelector.equals( "*" ) )
+        // special check for comment
+        if ( tagSelector.equalsIgnoreCase( "comment" ) )
         {
-            while ( it.hasNext() )
+            if ( it.hasNext() )
             {
                 token = it.next();
-                if ( token.type == HtmlToken.Type.TAG_NAME )
+                if ( token.type == HtmlToken.Type.START_COMMENT )
                 {
-                    if ( ! tagSelector.equalsIgnoreCase( token.str ) )
-                    {
-                        state = false;
-                    }
-                    break;
+                    // save the level / sequence at which match occurred
+                    levelsMatched.add( level, sequence );
+                    return true;
                 }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        // special check for cdata
+        if ( tagSelector.equalsIgnoreCase( "cdata" ) )
+        {
+            if ( it.hasNext() )
+            {
+                token = it.next();
+                if ( token.type == HtmlToken.Type.START_CDATA )
+                {
+                    // save the level / sequence at which match occurred
+                    levelsMatched.add( level, sequence );
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        // special check for doctype
+        if ( tagSelector.equalsIgnoreCase( "processing-instruction" ) )
+        {
+            if ( it.hasNext() )
+            {
+                token = it.next();
+                if ( token.type == HtmlToken.Type.PROCESSING_INSTRUCTION )
+                {
+                    // save the level / sequence at which match occurred
+                    levelsMatched.add( level, sequence );
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        // special check for doctype
+        if ( tagSelector.equalsIgnoreCase( "doctype" ) )
+        {
+            if ( it.hasNext() )
+            {
+                token = it.next();
+                if ( token.type == HtmlToken.Type.DOCTYPE )
+                {
+                    // save the level / sequence at which match occurred
+                    levelsMatched.add( level, sequence );
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        // check the TAG 
+        state = false;
+        while ( it.hasNext() )
+        {
+            token = it.next();
+            if ( token.type == HtmlToken.Type.TAG_NAME )
+            {
+                if ( tagSelector.equals( "*" ) || tagSelector.equalsIgnoreCase( token.str ) )
+                {
+                    state = true;
+                }
+                break;
+            }
+            else if ( token.type == HtmlToken.Type.CLOSE_TAG )
+            {
+                break;
             }
         }
 
@@ -119,24 +212,16 @@ public class Component
             return false;
         }
 
-        // check pseudo selector :first-child if set
-        if ( is_first
-            && combinator != CombinatorType.ROOT
-            && sequence != 1 )
-        {
-            return false;
-        }
-
         // check pseudo selector :nth-child
-        if ( nth_child_a == 0 )
+        if ( nthChildA == 0 )
         {
-            if ( sequence != nth_child_b )
+            if ( sequence != nthChildB )
             {
                 return false;
             }
         }
-        else if ( ( sequence - nth_child_b ) * nth_child_a < 0
-                || ( sequence - nth_child_b ) % nth_child_a != 0 )
+        else if ( ( sequence - nthChildB ) * nthChildA < 0
+                || ( sequence - nthChildB ) % nthChildA != 0 )
         {
             return false;
         }
@@ -302,21 +387,13 @@ public class Component
 
     public void clearLevelMatched( int level, boolean implied )
     {
-        // if ( combinator != Component.CombinatorType.SIBLING && combinator != Component.CombinatorType.ADJACENT )
-        if ( combinator == Component.CombinatorType.ADJACENT )
+        if ( implied )
         {
-            levelsMatched.remove( level - 1 );
-        }
-        else if ( implied )
-        {
-            levelsMatched.remove( level - 3 );
-// levelsMatched.remove( level );
-// System.err.println("------"+level+"------");
-// try{ Integer obj=null; obj.byteValue(); } catch (Exception e) { e.printStackTrace(); }
+            levelsMatched.remove( level, -1 );
         }
         else
         {
-            levelsMatched.remove( level );
+            levelsMatched.remove( level, 0 );
         }
     }
 
@@ -340,6 +417,19 @@ public class Component
         levelsMatched.clear();
     }
 
+    public int getLevelAdjustment()
+    {
+        switch ( combinator )
+        {
+        case ROOT: return 0;
+        case DESCENDENT: return 0;
+        case CHILD: return 0;
+        case ADJACENT: return 1;
+        case SIBLING: return 1;
+        default: return 0;
+        }
+    }
+
     public String toString()
     {
         StringBuffer sb = new StringBuffer( );
@@ -361,32 +451,32 @@ public class Component
         }
 
         // pseudo selectors
-        if ( nth_child_a != 1 || nth_child_b != 0 )
+        if ( nthChildA != 1 || nthChildB != 0 )
         {
-            if ( nth_child_a == 0 &&nth_child_b == 1 )
+            if ( nthChildA == 0 &&nthChildB == 1 )
             {
                 sb.append( ":first-child" );
             }
             else
             {
                 sb.append( ":nth-child(" );
-                if ( nth_child_a == 2 && nth_child_b == 0 )
+                if ( nthChildA == 2 && nthChildB == 0 )
                 {
                     sb.append( "even" );
                 }
-                else if ( nth_child_a == 2 && nth_child_b == 1 )
+                else if ( nthChildA == 2 && nthChildB == 1 )
                 {
                     sb.append( "odd" );
                 }
                 else
                 {
-                    if ( nth_child_a != 0 )
+                    if ( nthChildA != 0 )
                     {
-                        sb.append( nth_child_a );
+                        sb.append( nthChildA );
                         sb.append( "n" );
-                        if ( nth_child_b >= 0 ) sb.append( "+" );
+                        if ( nthChildB >= 0 ) sb.append( "+" );
                     }
-                    sb.append( nth_child_b );
+                    sb.append( nthChildB );
                 }
                 sb.append( ")" );
             }

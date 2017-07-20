@@ -604,7 +604,7 @@ public class Lexer
             }
 
             // if ( ! Character.isLetterOrDigit( (char)buffer[pos] ) && buffer[pos] != '|' )
-            if ( ! Character.isLetterOrDigit( (char)buffer[pos] ) )
+            if ( ! Character.isLetterOrDigit( (char)buffer[pos] ) && buffer[pos] != '-' )
             {
                 state = State.IN_LIMBO;
                 break;

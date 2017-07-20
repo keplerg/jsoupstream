@@ -2,15 +2,22 @@ package org.jsoupstream;
 
 import java.util.List;
 import java.util.ListIterator;
+import org.jsoupstream.selector.Selector;
 
 /**
    Set of generic callback functions to call as CSS actions. 
+    Note: Callback functions should return true unless you want to subsequent callback functions within the
+    matched selector. Here is an example:
+
+    h1 { callback_that_can_return_false(); callback_wont_be_called_when_previous_returns_false(); }
+    h1 { callback_will_always_be_called_regardless_of_other_selectors_return(); }
+
  */
 public class Functions
 {
     public Functions() {}
 
-    public boolean delete(List<HtmlToken> tokenQueue)
+    public boolean delete(Selector selector, List<HtmlToken> tokenQueue)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
         HtmlToken token;
@@ -25,35 +32,35 @@ public class Functions
         return true;
     }
 
-    public boolean print(List<HtmlToken> tokenQueue)
+    public boolean print(Selector selector, List<HtmlToken> tokenQueue)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
         System.out.print( "[[" );
         while ( lit.hasNext() )
         {
             HtmlToken token = lit.next();
-            System.out.print( new String( token.text ) );
+            System.out.print( token.str );
         }
         System.out.println( "]]" );
 
         return true;
     }
 
-    public boolean printErr(List<HtmlToken> tokenQueue)
+    public boolean printErr(Selector selector, List<HtmlToken> tokenQueue)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
         System.err.print( "[[" );
         while ( lit.hasNext() )
         {
             HtmlToken token = lit.next();
-            System.err.print( new String( token.text ) );
+            System.err.print( token.str );
         }
         System.err.println( "]]" );
 
         return true;
     }
 
-    public boolean replaceAttribute(List<HtmlToken> tokenQueue, String attr, String newAttr)
+    public boolean replaceAttribute(Selector selector, List<HtmlToken> tokenQueue, String attr, String newAttr)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
         while ( lit.hasNext() )
@@ -61,38 +68,73 @@ public class Functions
             HtmlToken token = lit.next();
             if ( token.type == HtmlToken.Type.ATTRIBUTE_NAME )
             {
-                if ( attr.equalsIgnoreCase( new String( token.text ) ) )
+                if ( attr.equalsIgnoreCase( token.str ) )
                 {
                     lit.set( HtmlToken.getToken( newAttr.getBytes(), HtmlToken.Type.ATTRIBUTE_NAME ) );
                     HtmlToken.relinquish( token );
                     return true;
                 }
             }
+            else if ( token.type == HtmlToken.Type.CLOSE_TAG )
+            {
+                break;
+            }
         }
 
-        return false;
+        return true;
     }
 
-    public boolean addAttributeValue(List<HtmlToken> tokenQueue, String attr, String addValue)
+    public boolean addAttribute(Selector selector, List<HtmlToken> tokenQueue, String name, String value)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
-        boolean found = false;
+        HtmlToken token;
+
         while ( lit.hasNext() )
         {
-            HtmlToken token = lit.next();
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.TAG_NAME )
+            {
+                lit.add( HtmlToken.getToken( " ".getBytes(), HtmlToken.Type.WHITESPACE ) );
+                lit.add( HtmlToken.getToken( name.getBytes(), HtmlToken.Type.ATTRIBUTE_NAME ) );
+                lit.add( HtmlToken.getToken( "=".getBytes(), HtmlToken.Type.EQUALS ) );
+                lit.add( HtmlToken.getToken( ("\""+value+"\"").getBytes(), HtmlToken.Type.ATTRIBUTE_VALUE ) );
+                break;
+            }
+            else if ( token.type == HtmlToken.Type.CLOSE_TAG )
+            {
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    public boolean addAttributeValue(Selector selector, List<HtmlToken> tokenQueue, String attr, String addValue)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+        boolean found = false;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
             if ( token.type == HtmlToken.Type.ATTRIBUTE_NAME )
             {
-                if ( attr.equalsIgnoreCase( new String( token.text ) ) )
+                if ( attr.equalsIgnoreCase( token.str ) )
                 {
                     found = true;
                 }
+            }
+            else if ( token.type == HtmlToken.Type.CLOSE_TAG )
+            {
+                break;
             }
             else if ( found )
             {
                 if ( token.type == HtmlToken.Type.ATTRIBUTE_VALUE )
                 {
                     StringBuffer newValue = new StringBuffer( );
-                    String value = new String( token.text );
+                    String value = token.str;
                     char quote = value.charAt( 0 );
                     String arr[] = value.substring( 1, value.length() - 1 ).split( " +" );
                     boolean first = true;
@@ -125,10 +167,34 @@ public class Functions
             }
         }
 
-        return false;
+        return true;
     }
 
-    public boolean replaceText(List<HtmlToken> tokenQueue, String text)
+    public boolean replace(Selector selector, List<HtmlToken> tokenQueue, String text)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+        boolean replaced = false;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( ! replaced )
+            {
+                lit.set( HtmlToken.getToken( text.getBytes(), HtmlToken.Type.TEXT ) );
+                replaced = true;
+            }
+            else
+            {
+                lit.remove();
+            }
+            HtmlToken.relinquish( token );
+        }
+
+        return true;
+    }
+
+    public boolean replaceText(Selector selector, List<HtmlToken> tokenQueue, String text)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
         boolean replaced = false;
@@ -155,7 +221,7 @@ public class Functions
         return true;
     }
 
-    public boolean replaceInner(List<HtmlToken> tokenQueue, String text)
+    public boolean replaceInner(Selector selector, List<HtmlToken> tokenQueue, String text)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
         boolean replaced = false;
@@ -191,7 +257,7 @@ public class Functions
         return true;
     }
 
-    public boolean wrapElement(List<HtmlToken> tokenQueue, String tag)
+    public boolean wrapElement(Selector selector, List<HtmlToken> tokenQueue, String tag)
     {
         tokenQueue.add( 0, HtmlToken.getToken( ">".getBytes(), HtmlToken.Type.CLOSE_TAG ) );
         tokenQueue.add( 0, HtmlToken.getToken( tag.getBytes(), HtmlToken.Type.TAG_NAME ) );
@@ -203,28 +269,7 @@ public class Functions
         return true;
     }
 
-    public boolean addAttribute(List<HtmlToken> tokenQueue, String name, String value)
-    {
-        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
-        HtmlToken token;
-
-        while ( lit.hasNext() )
-        {
-            token = lit.next();
-            if ( token.type == HtmlToken.Type.TAG_NAME )
-            {
-                lit.add( HtmlToken.getToken( " ".getBytes(), HtmlToken.Type.WHITESPACE ) );
-                lit.add( HtmlToken.getToken( name.getBytes(), HtmlToken.Type.ATTRIBUTE_NAME ) );
-                lit.add( HtmlToken.getToken( "=".getBytes(), HtmlToken.Type.EQUALS ) );
-                lit.add( HtmlToken.getToken( ("\""+value+"\"").getBytes(), HtmlToken.Type.ATTRIBUTE_VALUE ) );
-                break;
-            }
-        }
-
-        return true;
-    }
-
-    public boolean insertBefore(List<HtmlToken> tokenQueue, String text)
+    public boolean insertBefore(Selector selector, List<HtmlToken> tokenQueue, String text)
     {
         HtmlToken token = HtmlToken.getToken( text.getBytes(), HtmlToken.Type.TEXT );
         tokenQueue.add( 0 , token );
@@ -232,11 +277,17 @@ public class Functions
         return true;
     }
 
-    public boolean insertAfter(List<HtmlToken> tokenQueue, String text)
+    public boolean insertAfter(Selector selector, List<HtmlToken> tokenQueue, String text)
     {
         HtmlToken token = HtmlToken.getToken( text.getBytes(), HtmlToken.Type.TEXT );
         tokenQueue.add( token );
 
+        return true;
+    }
+
+    public boolean done(Selector selector, List<HtmlToken> tokenQueue)
+    {
+        selector.setDone( true );
         return true;
     }
 }
