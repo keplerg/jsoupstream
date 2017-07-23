@@ -29,7 +29,7 @@ import org.jsoupstream.selector.ParseException;
  */
 public class HtmlParser {
 
-    private static final int BUFSIZ = 65536;
+    private static final int BUFSIZ = 8192;
 
     private static enum State
     {
@@ -105,11 +105,51 @@ public class HtmlParser {
                 outBuffer.append( token.str );
                 HtmlToken.relinquish( token );
                 byte[] buffer = new byte[BUFSIZ];
+                ArrayDeque<Byte> unicode = new ArrayDeque<Byte>();
                 int num = lexer.read( buffer, 0, BUFSIZ );
+                int offset = 0;
                 while ( num > 0 )
                 {
+                    // back off any partially read Unicode value
+                    offset = 0;
+                    if ( this.charset == StandardCharsets.UTF_8 )
+                    {
+                        while ( (buffer[num - offset - 1] & 0x80) == 0x80 )
+                        {
+                            offset++;
+                            if ( (buffer[num - offset] & 0x40) == 0x40 )
+                            {
+                                if ( ( (buffer[num - offset] & 0xE0) == 0xC0 && offset == 2 )
+                                    || ( (buffer[num - offset] & 0xF0) == 0xE0 && offset == 3 )
+                                    || ( (buffer[num - offset] & 0xF8) == 0xF0 && offset == 4 ) )
+                                {
+                                    // full unicode value on buffer
+                                    offset = 0;
+                                }
+                                break;
+                            }
+                        }
+
+                        // store partially read Unicode value
+                        while ( offset > 0 )
+                        {
+                            num--;
+                            unicode.push( new Byte( buffer[num] ) );
+                            buffer[num] = (byte)0;
+                            offset--;
+                        }
+                    }
+
                     outBuffer.append( new String( buffer, 0, num, charset ) );
-                    num = lexer.read( buffer, 0, BUFSIZ );
+ 
+                    // restore partially read Unicode value to buffer
+                    while ( unicode.size() > 0 )
+                    {
+                        buffer[offset++] = unicode.pop( );
+                    }
+
+                    num = lexer.read( buffer, offset, (BUFSIZ - offset) );
+                    num += offset;
                 }
                 break;
             }

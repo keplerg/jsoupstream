@@ -2,6 +2,7 @@ package org.jsoupstream;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.io.InputStream;
 import java.io.IOException;
@@ -18,8 +19,6 @@ import java.io.IOException;
  */
 public class HtmlLexer
 {
-    private static final boolean USE_INTERNAL_READ = false;  // buggy - don't use
-    private static final int IN_BUFSIZ = 8192;
     private static final int BUFSIZ = 4096;
     private static enum State {
         BEGIN,
@@ -40,14 +39,9 @@ public class HtmlLexer
 
     private InputStream in;
     private Charset charset = StandardCharsets.UTF_8;
-    private byte[] readBuffer = new byte[IN_BUFSIZ];
     private byte[] buffer = new byte[BUFSIZ];
-    private byte current_quote = ' ';
     private int pos = 0; // where currently positioned in the buffer
-    private int in_pos = 0; // where currently positioned in the readBuffer
-    private int in_size = 0;
-    private int mark_pos = 0;
-    private boolean in_mark = false;
+    private byte current_quote = ' ';
     private State state = State.BEGIN;
 
     public HtmlLexer(String html, Charset charset)
@@ -64,7 +58,7 @@ public class HtmlLexer
 
     public HtmlLexer(InputStream in)
     {
-        if ( ! USE_INTERNAL_READ && ! in.markSupported() )
+        if ( ! in.markSupported() )
         {
             this.in = new BufferedInputStream( in );
         }
@@ -223,117 +217,23 @@ public class HtmlLexer
 
     private int read() throws IOException
     {
-        if ( USE_INTERNAL_READ )
-        {
-            if ( in_size < 0 )
-            {
-                return -1;
-            }
-
-            if ( in_pos >= in_size )
-            {
-                in_size = this.read( readBuffer, 0 , IN_BUFSIZ );
-                if ( in_size < 0 )
-                {
-                    return -1;
-                }
-                in_pos = 0;
-            }
-
-            return readBuffer[in_pos++];
-        }
-        else
-        {
-            return in.read();
-        }
+        return in.read();
     }
 
     public int read( byte[] buffer, int offset, int num ) throws IOException
     {
-        if ( USE_INTERNAL_READ )
-        {
-            int count = 0;
-
-            if ( in_size < 0 )
-            {
-                return -1;
-            }
-
-            while ( in_pos < in_size && count < num )
-            {
-                buffer[offset++] = readBuffer[in_pos++];
-                count++;
-            }
-    
-            if ( in_pos >= in_size )
-            {
-                if ( in_mark )
-                {
-                    // readBuffer = Arrays.copyOfRange( readBuffer, mark_pos, IN_BUFSIZ );
-                    if ( mark_pos > 0 )
-                    {
-                    // shift the data left to allow more room
-                    for ( int i = 0; i < (in_pos - mark_pos); i++ )
-                    {
-                        readBuffer[i] = readBuffer[i+mark_pos];
-                    }
-                    in_pos -= mark_pos;
-                    mark_pos = 0;
-                    }
-                    in_size = in.read( readBuffer, in_pos, (IN_BUFSIZ - in_pos) );
-                }
-                else
-                {
-                    in_size = in.read( readBuffer, 0, IN_BUFSIZ );
-                    in_pos = 0;
-                }
-
-                if ( in_size < 0 )
-                {
-                    return (count == 0) ? -1 : count;
-                }
-                in_size += in_pos;
-            }
-
-            while ( in_pos < in_size && count < num )
-            {
-                buffer[offset++] = readBuffer[in_pos++];
-                count++;
-            }
-
-            return count;
-        }
-        else
-        {
-            return in.read( buffer, offset, num );
-        }
+        return in.read( buffer, offset, num );
     }
 
 
     private void reset( ) throws IOException
     {
-        if ( USE_INTERNAL_READ )
-        {
-            in_pos = mark_pos;
-            in_mark = false;
-        }
-        else
-        {
-            in.reset();
-        }
+        in.reset();
     }
 
     private void mark( int readLimit )
     {
-        if ( USE_INTERNAL_READ )
-        {
-            in_mark = true;
-            mark_pos = in_pos;
-        }
-        else
-        {
-            in.mark( readLimit );
-        }
+        in.mark( readLimit );
     }
 
 
