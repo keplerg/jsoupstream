@@ -315,25 +315,4 @@ public class Parser
 
         return selectors;
     }
-
-    public static void main(String[] args)
-    {
-        try
-        {
-            FileInputStream is = new FileInputStream(args[0]);
-            Parser p = new Parser(is);
-
-            List<Selector> s = p.parse();
-            for (Selector ss : s )
-            {
-                System.out.println("--------------------------------");
-                System.out.println(ss);
-            }
-        }
-        catch (Exception e)
-        {
-            System.err.println(e.getMessage());
-            e.printStackTrace();
-        }
-    }
 }
