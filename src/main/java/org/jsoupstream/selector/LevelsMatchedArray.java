@@ -37,7 +37,7 @@ public class LevelsMatchedArray
         {
             temp[i] = levels[i];
         }
-        temp[max] = ( level * FACTOR ) + sequence;
+        temp[max] = (( level * FACTOR ) + sequence) | ACTIVE_MASK;
         levels = temp;
         max = newMax;
     }

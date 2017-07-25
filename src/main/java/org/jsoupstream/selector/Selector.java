@@ -108,7 +108,7 @@ public class Selector
         Component lastComponent = null;
         Component component = null;
         Component nextComponent = null;
- 
+
         // find how deep we have already matched
         Iterator<Component> it = components.iterator();
         if ( it.hasNext() )
@@ -164,14 +164,15 @@ public class Selector
                     }
                 }
             }
+
             if ( ! component.hasLevelsMatched() )
             {
                 break;
             }
-            lastComponent = component;
             depthMatched++;
+            lastComponent = component;
         }
-        
+
         // if we matched all components, return true
         if ( matched && depthMatched == components.size() )
         {
@@ -246,6 +247,33 @@ public class Selector
     {
         return levelsMatched.peek();
     }
+
+    private String printQueue( List<HtmlToken> queue )
+    {
+        StringBuffer sb = new StringBuffer();
+        printQueue( queue, sb );
+        return sb.toString();
+    }
+
+    private void printQueue( List<HtmlToken> queue, StringBuffer sb )
+    {
+        HtmlToken token;
+
+        if ( queue == null || queue.size() == 0 )
+        {
+            return;
+        }
+
+        for ( int i = 1 ; i < queue.size(); i++ )
+        {
+            token = queue.get( i );
+            if ( token != null )
+            {
+                sb.append( token.str );
+            }
+        }
+    }
+
 
     public String toString()
     {
