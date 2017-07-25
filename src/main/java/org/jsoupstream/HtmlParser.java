@@ -273,7 +273,7 @@ public class HtmlParser {
                         tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
                         stackTokens = stack.get( currentLevel );
                         stackToken = ( stackTokens.size() == 0 ) ? null : stackTokens.peek( );
-                        boolean keepBuffering = false;
+                        boolean keepBuffering = true;
 
                         for ( Selector selector : selectors )
                         {
@@ -288,6 +288,7 @@ public class HtmlParser {
                                         {
                                             selector.executeActions( tokenQueue, null, currentLevel, false );
                                         }
+                                        keepBuffering = false;
                                     }
                                     else // normal open tag
                                     {
@@ -675,6 +676,13 @@ public class HtmlParser {
             }
         }
         sb.append( "\n[[-----]]\n" );
+    }
+
+    private String printQueue( List<HtmlToken> queue )
+    {
+        StringBuffer sb = new StringBuffer();
+        printQueue( queue, sb );
+        return sb.toString();
     }
 
     private void printQueue( List<HtmlToken> queue, StringBuffer sb )

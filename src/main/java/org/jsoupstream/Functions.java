@@ -2,6 +2,10 @@ package org.jsoupstream;
 
 import java.util.List;
 import java.util.ListIterator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import org.jsoupstream.selector.Selector;
 
 /**
@@ -15,6 +19,8 @@ import org.jsoupstream.selector.Selector;
  */
 public class Functions
 {
+    private static HashMap<String, Pattern> patterns = new HashMap<String, Pattern>();
+
     public Functions() {}
 
     public boolean delete(Selector selector, List<HtmlToken> tokenQueue)
@@ -221,6 +227,33 @@ public class Functions
         return true;
     }
 
+    public boolean replaceExpression(Selector selector, List<HtmlToken> tokenQueue, String pattern, String text)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        Pattern compiledPattern = patterns.get( pattern );
+        if ( compiledPattern == null )
+        {
+            compiledPattern = Pattern.compile( pattern );
+            patterns.put( pattern, compiledPattern );
+        }
+
+        Matcher matcher;
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.TEXT )
+            {
+                matcher = compiledPattern.matcher( token.str );
+                lit.set( HtmlToken.getToken( (matcher.replaceAll( text )).getBytes(), HtmlToken.Type.TEXT ) );
+                HtmlToken.relinquish( token );
+            }
+        }
+
+        return true;
+    }
+
     public boolean replaceInner(Selector selector, List<HtmlToken> tokenQueue, String text)
     {
         ListIterator<HtmlToken> lit = tokenQueue.listIterator();
@@ -281,6 +314,86 @@ public class Functions
     {
         HtmlToken token = HtmlToken.getToken( text.getBytes(), HtmlToken.Type.TEXT );
         tokenQueue.add( token );
+
+        return true;
+    }
+
+    public boolean contains(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.TEXT )
+            {
+                if ( token.str.contains( value ) )
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public boolean notContains(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.TEXT )
+            {
+                if ( token.str.contains( value ) )
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public boolean containsIgnoreCase(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.TEXT )
+            {
+                if ( token.str.toLowerCase().contains( value.toLowerCase() ) )
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public boolean notContainsIgnoreCase(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.TEXT )
+            {
+                if ( token.str.toLowerCase().contains( value.toLowerCase() ) )
+                {
+                    return false;
+                }
+            }
+        }
 
         return true;
     }

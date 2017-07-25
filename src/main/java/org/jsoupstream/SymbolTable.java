@@ -152,6 +152,7 @@ public class SymbolTable
 
         symbol_table.put("script", new Symbol("script", SymbolTable.Type.RAW_TEXT_ELEMENT, null));
         symbol_table.put("style", new Symbol("style", SymbolTable.Type.RAW_TEXT_ELEMENT, null));
+        symbol_table.put("template", new Symbol("template", SymbolTable.Type.RAW_TEXT_ELEMENT, null));
 
         symbol_table.put("textarea", new Symbol("textarea", SymbolTable.Type.ESCAPABLE_RAW_TEXT_ELEMENT, null));
         symbol_table.put("title", new Symbol("title", SymbolTable.Type.ESCAPABLE_RAW_TEXT_ELEMENT, null));
