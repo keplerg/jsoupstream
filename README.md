@@ -48,7 +48,7 @@ A selector is a chain of simple selectors, separated by combinators. Selectors a
 
 The universal selector (*) is implicit when no element selector is supplied (i.e. *.header and .header are equivalent).
 
-JSoupStream was written as an alternative to JSoup. JSoup differs in that the entire HTML document is read in to memory as a Document tree (DOM). JSoupStream is a streaming parser and only holds the list of tokens that are required to either perform a Selector match or execute a set of actions on a matched element. Both libraries have their strengths and weaknesses. JSoup generally requires more memory but has more functionality and runs slightly faster when the garbage collector is not overtaxed. JSoupStream also preserves whitespace (formatting) while JSoup does not.
+JSoupStream was written as an alternative to JSoup. JSoup differs in that the entire HTML document is read in to memory as a Document tree (DOM). JSoupStream is a streaming parser and only holds the list of tokens that are required to either perform a Selector match or execute a set of actions on a matched element. Both libraries have their strengths and weaknesses. JSoup generally requires more memory but has more functionality and runs slightly faster when the garbage collector is not overtaxed. JSoupStream can run significantly faster than JSoup if all the selectors are satified either by reaching the :count() or by calling the done action or setDone in a custom action. This short circuits parsing and the rest of the document is written directly out. JSoupStream also preserves whitespace (formatting) while JSoup does not.
 
 
 Below is a comparison table of the JSoup and JSoupStream supported Selector syntax:
