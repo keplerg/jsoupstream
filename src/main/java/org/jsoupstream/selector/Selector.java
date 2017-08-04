@@ -19,6 +19,8 @@ public class Selector
     private final ArrayList<Action> actions = new ArrayList<Action>();
 
     private boolean done = false; // short circuit to optimize performance
+    private boolean before = false; // :before pseudo selector
+    private boolean after = false; // :after pseudo selector
     private int start = 1; // when to start executing actions
     private int count = 0; // how many times to executing actions ( 0 means unlimited )
     private int matches = 0; // how many times selector matched
@@ -63,6 +65,31 @@ public class Selector
         this.done = done;
     }
 
+    public boolean isDone()
+    {
+        return this.done;
+    }
+
+    public void setBefore(boolean before)
+    {
+        this.before = before;
+    }
+
+    public boolean isBefore()
+    {
+        return this.before;
+    }
+
+    public void setAfter(boolean after)
+    {
+        this.after = after;
+    }
+
+    public boolean isAfter()
+    {
+        return this.after;
+    }
+
     public void setStart(int start)
     {
         this.start = start;
@@ -96,6 +123,18 @@ public class Selector
         else
         {
             return ( executes >= count );
+        }
+    }
+
+    public boolean isBuffering()
+    {
+        if ( before || after )
+        {
+            return false;
+        }
+        else
+        {
+            return true;
         }
     }
 
@@ -281,6 +320,26 @@ public class Selector
         for ( Component component : components )
         {
             sb.append( component );
+        }
+        if ( before )
+        {
+            sb.append( ":before" );
+        }
+        if ( after )
+        {
+            sb.append( ":after" );
+        }
+        if ( start != 1 )
+        {
+            sb.append( ":start(" );
+            sb.append( start );
+            sb.append( ")" );
+        }
+        if ( count > 0 )
+        {
+            sb.append( ":count(" );
+            sb.append( count );
+            sb.append( ")" );
         }
         sb.append( " {" );
         for ( Action action : actions )

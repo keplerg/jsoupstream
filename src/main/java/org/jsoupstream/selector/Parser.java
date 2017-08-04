@@ -134,7 +134,23 @@ public class Parser
                     current_component = current_selector.addComponent( "*", combinator );
                 }
                 int a, b;
-                if ( text.toLowerCase().startsWith( "start(" ) )
+                if ( text.toLowerCase().equalsIgnoreCase( "before" ) )
+                {
+                    if ( current_selector.isAfter() )
+                    {
+                        throw new ParseException("Parse failed on line: "+lex.getLine()+" Cannot combine both :before and :after pseudo selectors");
+                    }
+                    current_selector.setBefore( true );
+                }
+                else if ( text.toLowerCase().equalsIgnoreCase( "after" ) )
+                {
+                    if ( current_selector.isBefore() )
+                    {
+                        throw new ParseException("Parse failed on line: "+lex.getLine()+" Cannot combine both :before and :after pseudo selectors");
+                    }
+                    current_selector.setAfter( true );
+                }
+                else if ( text.toLowerCase().startsWith( "start(" ) )
                 {
                     Matcher matcher_start = START.matcher(text);
                     if ( matcher_start.matches() )
@@ -181,7 +197,7 @@ public class Parser
                         }
                         else
                         {
-                            throw new ParseException("Could not parse nth-child '"+arg+"': unexpected argument");
+                            throw new ParseException("Parse failed on line: "+lex.getLine()+" Could not parse nth-child '"+arg+"': unexpected argument");
                         }
                     }
                     else if ( matcher_ab.matches() )
@@ -196,14 +212,14 @@ public class Parser
                     }
                     else
                     {
-                        throw new ParseException("Could not parse nth-index '"+text+"': unexpected format");
+                        throw new ParseException("Parse failed on line: "+lex.getLine()+" Could not parse nth-index '"+text+"': unexpected format");
                     }
 
                     current_component.setNthChild( a, b );
                 }
                 else
                 {
-                    throw new ParseException("Could not parse '"+text+"': unsupported pseudo");
+                    throw new ParseException("Parse failed on line: "+lex.getLine()+" Could not parse '"+text+"': unsupported pseudo");
                 }
                 break;
             case COMBINATOR:
