@@ -27,20 +27,33 @@ public class TestParser {
             HtmlParser parser = new HtmlParser(css_is);
             css_is.close();
 
+            if ( args.length > 3 )
+            {
+                if ( args[3].startsWith( "min" ) || args[3].equalsIgnoreCase( "yes" ) )
+                {
+                    parser.setMinimizeHtml( true );
+                }
+            }
+
             for (int i = 0; i < count; i++)
             {
-                // URL url = new URL("http://www.oracle.com/");
-                // URL url = new URL( args[1] );
-                // html_is = url.openStream();
+                if ( args[1].startsWith( "http" ) )
+                {
+                    URL url = new URL( args[1] );
+                    html_is = url.openStream();
+                }
+                else
+                {
+                    html_is = new FileInputStream( args[1] );
+                }
 
-                html_is = new FileInputStream(args[1]);
-                HtmlLexer lexer = new HtmlLexer(html_is);
+                HtmlLexer lexer = new HtmlLexer( html_is );
                 String result = parser.parse( lexer );
                 html_is.close();
                 System.out.print( result );
 
                 // parser must be reset if it to be reused
-                parser.reset( );
+                parser.reset();
             }
 		} catch(Exception e) {
 			// if any I/O error occurs
