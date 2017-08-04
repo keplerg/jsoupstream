@@ -1,5 +1,6 @@
 package org.jsoupstream;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Deque;
 import java.util.HashSet;
@@ -41,8 +42,16 @@ public class HtmlParser {
         IN_END_TAG
     }
 
+    private static ArrayList<String> minimizeSkipTags = new ArrayList<String>();
+    static {
+        minimizeSkipTags.add( "pre" );
+        minimizeSkipTags.add( "script" );
+    }
+
     private List<Selector> selectors;
     private Charset charset;
+    private boolean minimizeHtml = false;
+    private boolean suppressMinimizeHtml = false;
 
     public HtmlParser( InputStream selectorCss ) throws ParseException, IOException
     {
@@ -60,6 +69,17 @@ public class HtmlParser {
         // Parse the CSS here so we can reuse it over many HTML files.
         Parser parser = new Parser( selectorCss );
         this.selectors = parser.parse();
+    }
+
+    public void setMinimizeHtml( boolean minimizeHtml )
+    {
+        this.minimizeHtml = minimizeHtml; 
+    }
+
+    public void setMinimizeSkipTags( Collection<String> skipTags )
+    {
+        HtmlParser.minimizeSkipTags.clear( ); 
+        HtmlParser.minimizeSkipTags.addAll( skipTags ); 
     }
 
     public String parse ( HtmlLexer lexer ) throws IOException
@@ -89,7 +109,7 @@ public class HtmlParser {
 
         while ( token.type != HtmlToken.Type.EOF )
         {
-            if ( activeSelectorCount(deferredExecute) == 0 )
+            if ( activeSelectorCount(deferredExecute) == 0 && ! minimizeHtml )
             {
                 // all selectors have been satified - no more parsing required
                 passThru = true;
@@ -154,12 +174,7 @@ public class HtmlParser {
                 break;
             }
 
-            if ( token.type != HtmlToken.Type.OPEN_TAG
-                && token.type != HtmlToken.Type.START_COMMENT
-                && token.type != HtmlToken.Type.START_CDATA
-                && token.type != HtmlToken.Type.DOCTYPE
-                && token.type != HtmlToken.Type.PROCESSING_INSTRUCTION
-                && bufferingStart.size() == 0 )
+            if ( bufferingStart.size() == 0 )
             {
                 if ( tokenBuffer.size() > 0 )
                 {
@@ -170,8 +185,8 @@ public class HtmlParser {
                     }
                     tokenBuffer.clear();
                 }
-                outBuffer.append( token.str );
-                HtmlToken.relinquish( token );
+                // always buffer at least the latest token
+                tokenBuffer.add( token );
             }
             else
             {
@@ -180,6 +195,26 @@ public class HtmlParser {
 
             switch ( token.type )
             {
+            case WHITESPACE:
+                if ( minimizeHtml && ! suppressMinimizeHtml )
+                {
+                    token.str = " ";
+                }
+                break;
+            case TEXT:
+                if ( minimizeHtml && ! suppressMinimizeHtml )
+                {
+                    String newTokenStr = token.str.replaceAll("\\s+", " ");
+                    if ( newTokenStr.equals( " " ) )
+                    {
+                        token.str = "";
+                    }
+                    else
+                    {
+                        token.str = newTokenStr;
+                    }
+                }
+                break;
             case OPEN_TAG:
                 bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
                 state = HtmlParser.State.IN_START_TAG;
@@ -195,6 +230,16 @@ public class HtmlParser {
 
                 if ( state == HtmlParser.State.IN_START_TAG )
                 {
+                    if ( minimizeHtml )
+                    {
+                        for ( String skipTag : minimizeSkipTags )
+                        {
+                            if ( currentTag.equalsIgnoreCase( skipTag ) )
+                            {
+                                suppressMinimizeHtml = true;
+                            }
+                        }
+                    }
                     if ( stackToken != null && stackToken.symbol != null && stackToken.symbol.implied != null )
                     {
                         for ( String sym : stackToken.symbol.implied )
@@ -238,6 +283,16 @@ public class HtmlParser {
                 }
                 else if ( state == HtmlParser.State.IN_END_TAG )
                 {
+                    if ( minimizeHtml )
+                    {
+                        for ( String skipTag : minimizeSkipTags )
+                        {
+                            if ( currentTag.equalsIgnoreCase( skipTag ) )
+                            {
+                                suppressMinimizeHtml = false;
+                            }
+                        }
+                    }
                     stackTokens = stack.get( currentLevel );
                     if ( stackTokens.size() > 0 )
                     {
@@ -267,28 +322,24 @@ public class HtmlParser {
             case CLOSE_TAG:
                 if ( state == HtmlParser.State.IN_START_TAG )
                 {
-                    if ( bufferingStart.size() > 0 )
-                    {
-                        start = bufferingStart.peek();
-                        tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
-                        stackTokens = stack.get( currentLevel );
-                        stackToken = ( stackTokens.size() == 0 ) ? null : stackTokens.peek( );
-                        boolean keepBuffering = true;
+                    start = bufferingStart.peek();
+                    tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
+                    stackTokens = stack.get( currentLevel );
+                    stackToken = ( stackTokens.size() == 0 ) ? null : stackTokens.peek( );
+                    boolean keepBuffering = false;
 
-                        for ( Selector selector : selectors )
+                    for ( Selector selector : selectors )
+                    {
+                        if ( ! selector.isExpired() )
                         {
-                            if ( ! selector.isExpired() )
+                            if ( selector.check( stackToken, tokenQueue, currentLevel, stackTokens.size() ) )
                             {
-                                if ( selector.check( stackToken, tokenQueue, currentLevel, stackTokens.size() ) )
+                                if ( selector.isBuffering() && bufferingStart.size() > 0 )
                                 {
                                     // is this a self closing tag?
                                     if ( stackToken != null && stackToken.getSymbolType() == SymbolTable.Type.VOID_ELEMENT )
                                     {
-                                        if ( ! selector.isExpired() )
-                                        {
-                                            selector.executeActions( tokenQueue, null, currentLevel, false );
-                                        }
-                                        keepBuffering = false;
+                                        selector.executeActions( tokenQueue, null, currentLevel, false );
                                     }
                                     else // normal open tag
                                     {
@@ -296,17 +347,34 @@ public class HtmlParser {
                                         keepBuffering = true;
                                     }
                                 }
+                                else if ( selector.isBefore() )
+                                {
+                                    selector.executeActions( tokenQueue.subList(0,0), null, currentLevel, false );
+                                }
+                                else if ( selector.isAfter() )
+                                {
+                                    // is this a self closing tag?
+                                    if ( stackToken != null && stackToken.getSymbolType() == SymbolTable.Type.VOID_ELEMENT )
+                                    {
+                                        selector.executeActions( tokenQueue.subList(tokenQueue.size(),tokenQueue.size()), null, currentLevel, false );
+                                    }
+                                    else
+                                    {
+                                        deferredExecute.add( selector );
+                                    }
+                                }
                             }
                         }
-                        if ( ! keepBuffering )
-                        {
-                            start = bufferingStart.pop();
-                        }
-                        if ( stackToken != null && stackToken.getSymbolType() == SymbolTable.Type.VOID_ELEMENT )
-                        {
-                            relinquishHtmlTokens( stack, currentLevel );
-                            currentLevel--;
-                        }
+                    }
+
+                    if ( ! keepBuffering )
+                    {
+                        start = bufferingStart.pop();
+                    }
+                    if ( stackToken != null && stackToken.getSymbolType() == SymbolTable.Type.VOID_ELEMENT )
+                    {
+                        relinquishHtmlTokens( stack, currentLevel );
+                        currentLevel--;
                     }
                 }
                 else if ( state == HtmlParser.State.IN_END_TAG )
@@ -326,18 +394,25 @@ public class HtmlParser {
                                 stackToken = null;
                             }
 
-                            if ( bufferingStart.size() > 0 )
+                            if ( deferredExecute.size() > 0 )
                             {
-                                start = bufferingStart.pop();
                                 boolean implied = false;
-                                if ( stackToken != null && currentTag.equalsIgnoreCase( stackToken.str ) )
+                                if ( bufferingStart.size() > 0 )
                                 {
-                                    tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
+                                    start = bufferingStart.pop();
+                                    if ( stackToken != null && currentTag.equalsIgnoreCase( stackToken.str ) )
+                                    {
+                                        tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
+                                    }
+                                    else
+                                    {
+                                        implied = true;
+                                        tokenQueue = tokenBuffer.subList( start, (endTagStart - 1) );
+                                    }
                                 }
                                 else
                                 {
-                                    implied = true;
-                                    tokenQueue = tokenBuffer.subList( start, (endTagStart - 1) );
+                                    tokenQueue = tokenBuffer.subList( tokenBuffer.size(), tokenBuffer.size() );
                                 }
                                 HashSet<Selector> removeSet = new HashSet<Selector>();
                                 for ( Selector selector : deferredExecute )
@@ -375,27 +450,34 @@ public class HtmlParser {
                         {
                             relinquishHtmlTokens( stack, currentLevel );
                             currentLevel--;
-                            start = bufferingStart.pop();
-                            tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
-                            for ( Selector selector : selectors )
-                            {
-                                if ( ! selector.isExpired() )
-                                {
-                                    if ( selector.check( stackToken, tokenQueue, currentLevel, stackTokens.size() ) )
-                                    {
-                                        selector.executeActions( tokenQueue, null, currentLevel, false );
-                                    }
-                                }
-                            }
                         }
-                        else
+                        start = bufferingStart.pop();
+                        tokenQueue = tokenBuffer.subList( start, tokenBuffer.size() );
+                        for ( Selector selector : selectors )
                         {
-                            tokenQueue = tokenBuffer.subList( bufferingStart.pop(), tokenBuffer.size() );
-                            for ( Selector selector : selectors )
+                            if ( ! selector.isExpired() )
                             {
                                 if ( selector.check( stackToken, tokenQueue, currentLevel, stackTokens.size() ) )
                                 {
-                                    deferredExecute.add( selector );
+                                    if ( selector.isBuffering() )
+                                    {
+                                        if ( stackToken != null && stackToken.getSymbolType() == SymbolTable.Type.VOID_ELEMENT )
+                                        {
+                                            selector.executeActions( tokenQueue, null, currentLevel, false );
+                                        }
+                                        else
+                                        {
+                                            deferredExecute.add( selector );
+                                        }
+                                    }
+                                    else if ( selector.isBefore() )
+                                    {
+                                        selector.executeActions( tokenQueue.subList(0,0), null, currentLevel, false );
+                                    }
+                                    else if ( selector.isAfter() )
+                                    {
+                                        selector.executeActions( tokenQueue.subList(tokenQueue.size(),tokenQueue.size()), null, currentLevel, false );
+                                    }
                                 }
                             }
                         }
@@ -439,6 +521,7 @@ public class HtmlParser {
                 currentLevel--;
                 break;
             case START_CDATA:
+                suppressMinimizeHtml = true;
                 currentLevel++;
                 if ( cdataSequence == 0 && currentLevel < stack.size() )
                 {
@@ -468,6 +551,7 @@ public class HtmlParser {
             case CDATA:
                 break;
             case END_CDATA:
+                suppressMinimizeHtml = false;
                 if ( matchedCdata && bufferingStart.size() > 0 )
                 {
                     start = bufferingStart.pop();
@@ -503,15 +587,24 @@ public class HtmlParser {
                 if ( matchedComment )
                 {
                     bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
+                    suppressMinimizeHtml = true;
                 }
                 else
                 {
+                    if ( minimizeHtml )
+                    {
+                        tokenBuffer.remove( (tokenBuffer.size() - 1) );
+                    }
                     commentSequence = 0;
                 }
                 prevState = state;
                 state = HtmlParser.State.IN_COMMENT;
                 break;
             case COMMENT:
+                if ( minimizeHtml && ! suppressMinimizeHtml )
+                {
+                    tokenBuffer.remove( (tokenBuffer.size() - 1) );
+                }
                 break;
             case END_COMMENT:
                 if ( matchedComment && bufferingStart.size() > 0 )
@@ -526,8 +619,13 @@ public class HtmlParser {
                         }
                     }
                 }
+                else if ( minimizeHtml && ! suppressMinimizeHtml )
+                {
+                    tokenBuffer.remove( (tokenBuffer.size() - 1) );
+                }
                 currentLevel--;
                 matchedComment = false;
+                suppressMinimizeHtml = false;
                 state = prevState;
                 break;
             default:

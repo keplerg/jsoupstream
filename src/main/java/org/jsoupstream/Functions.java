@@ -398,6 +398,87 @@ public class Functions
         return true;
     }
 
+
+    public boolean commentContains(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.COMMENT )
+            {
+                if ( token.str.contains( value ) )
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public boolean commentNotContains(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.COMMENT )
+            {
+                if ( token.str.contains( value ) )
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public boolean commentContainsIgnoreCase(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.COMMENT )
+            {
+                if ( token.str.toLowerCase().contains( value.toLowerCase() ) )
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public boolean commentNotContainsIgnoreCase(Selector selector, List<HtmlToken> tokenQueue, String value)
+    {
+        ListIterator<HtmlToken> lit = tokenQueue.listIterator();
+        HtmlToken token;
+
+        while ( lit.hasNext() )
+        {
+            token = lit.next();
+            if ( token.type == HtmlToken.Type.COMMENT )
+            {
+                if ( token.str.toLowerCase().contains( value.toLowerCase() ) )
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     public boolean done(Selector selector, List<HtmlToken> tokenQueue)
     {
         selector.setDone( true );
