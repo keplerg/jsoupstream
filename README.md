@@ -96,6 +96,8 @@ E, F, G|all matching elements E, F, or G|a[href], div, h3|Y|N
 :only-child|elements that have a parent element and whose parent element hasve no other element children||Y|N
 :only-of-type|an element that has a parent element and whose parent element has no other element children with the same expanded element name||Y|N
 :empty|elements that have no children at all||Y|N
+:before|execute actions before the tag that matches. Does not buffer|p:first-child:before| N* | Y
+:after|execute actions after the tag that matches. Does not buffer|img:after| N* | Y
 :start(n)|execute actions only when n matches has occurred. Defaults to 1|ul li:start(5)| N* | Y
 :count(n)|execute actions at most n times. defaults to 0 (unlimited)|head > title:count(1)| N* | Y
 
