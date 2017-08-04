@@ -38,6 +38,11 @@ Here is an example to replace the first H1 heading on a page:
   body h1:count(1) { replaceText('My New Title') }
 ```
 
+Another example to replace the first H1 heading on a page:
+```css
+  body h1 { replaceText('My New Title'); done }
+```
+
 You can also chain actions together separated bu a semicolon:
 ```css
   img { addAttribute('data-src', 'example.com'); addAttribute('class', 'newClass') }
