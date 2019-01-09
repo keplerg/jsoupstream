@@ -154,7 +154,7 @@ public class HtmlParser {
                         while ( offset > 0 )
                         {
                             num--;
-                            unicode.push( new Byte( buffer[num] ) );
+                            unicode.push( Byte.valueOf( buffer[num] ) );
                             buffer[num] = (byte)0;
                             offset--;
                         }
@@ -216,7 +216,7 @@ public class HtmlParser {
                 }
                 break;
             case OPEN_TAG:
-                bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
+                bufferingStart.push( Integer.valueOf( tokenBuffer.size() - 1 ) );
                 state = HtmlParser.State.IN_START_TAG;
                 break;
             case TAG_NAME:
@@ -539,7 +539,7 @@ public class HtmlParser {
                 }
                 if ( matchedCdata )
                 {
-                    bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
+                    bufferingStart.push( Integer.valueOf( tokenBuffer.size() - 1 ) );
                 }
                 else
                 {
@@ -586,7 +586,7 @@ public class HtmlParser {
                 }
                 if ( matchedComment )
                 {
-                    bufferingStart.push( new Integer( tokenBuffer.size() - 1 ) );
+                    bufferingStart.push( Integer.valueOf( tokenBuffer.size() - 1 ) );
                     suppressMinimizeHtml = true;
                 }
                 else

@@ -98,7 +98,7 @@ public class Action
                 args[i + 2] = arguments.get( i );
             }
 
-            Object obj = callbackClass.newInstance();
+            Object obj = callbackClass.getDeclaredConstructor().newInstance();
 
             // call the method
             Method method = callbackClass.getDeclaredMethod( function, params );

@@ -215,7 +215,7 @@ public class Selector
         // if we matched all components, return true
         if ( matched && depthMatched == components.size() )
         {
-            levelsMatched.push( new Integer( level ) );
+            levelsMatched.push( Integer.valueOf( level ) );
             matches++;
             return true;
         }
